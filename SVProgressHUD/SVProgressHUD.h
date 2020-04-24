@@ -38,6 +38,7 @@ typedef NS_ENUM(NSUInteger, SVProgressHUDAnimationType) {
 
 typedef void (^SVProgressHUDShowCompletion)(void);
 typedef void (^SVProgressHUDDismissCompletion)(void);
+typedef void (^SVProgressHUDCancel)(void);
 
 @interface SVProgressHUD : UIView
 
@@ -115,6 +116,7 @@ typedef void (^SVProgressHUDDismissCompletion)(void);
 + (void)showWithMaskType:(SVProgressHUDMaskType)maskType __attribute__((deprecated("Use show and setDefaultMaskType: instead.")));
 + (void)showWithStatus:(nullable NSString*)status;
 + (void)showWithStatus:(nullable NSString*)status maskType:(SVProgressHUDMaskType)maskType __attribute__((deprecated("Use showWithStatus: and setDefaultMaskType: instead.")));
++ (void)showWithStatus:(nullable NSString*)status cancelBlock:(nonnull SVProgressHUDCancel)block;
 
 + (void)showProgress:(float)progress;
 + (void)showProgress:(float)progress maskType:(SVProgressHUDMaskType)maskType __attribute__((deprecated("Use showProgress: and setDefaultMaskType: instead.")));

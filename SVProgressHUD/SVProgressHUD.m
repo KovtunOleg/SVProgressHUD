@@ -43,6 +43,7 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 @property (nonatomic, strong) UIBlurEffect *hudViewCustomBlurEffect;
 @property (nonatomic, strong) UILabel *statusLabel;
 @property (nonatomic, strong) UIImageView *imageView;
+@property (nonatomic, strong) UIButton *cancelButton;
 
 @property (nonatomic, strong) UIView *indefiniteAnimatedView;
 @property (nonatomic, strong) SVProgressAnimatedView *ringView;
@@ -50,6 +51,8 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 
 @property (nonatomic, readwrite) CGFloat progress;
 @property (nonatomic, readwrite) NSUInteger activityCount;
+
+@property (nonatomic, strong) NSMutableArray *cancelBlocks;
 
 @property (nonatomic, readonly) CGFloat visibleKeyboardHeight;
 @property (nonatomic, readonly) UIWindow *frontWindow;
@@ -257,6 +260,13 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
     [self setDefaultMaskType:existingMaskType];
 }
 
++ (void)showWithStatus:(NSString*)status cancelBlock:(SVProgressHUDCancel)block {
+    // we need copy blocks to track calls count
+    [[self sharedView].cancelBlocks addObject:[block copy]];
+    
+    [self showWithStatus:status];
+}
+
 
 #pragma mark - Show, then automatically dismiss methods
 
@@ -391,7 +401,7 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
     if((self = [super initWithFrame:frame])) {
         _isInitializing = YES;
         
-        self.userInteractionEnabled = NO;
+        self.userInteractionEnabled = YES;
         self.activityCount = 0;
         
         self.backgroundView.alpha = 0.0f;
@@ -454,11 +464,15 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
     // Check if an image or progress ring is displayed
     BOOL imageUsed = (self.imageView.image) && !(self.imageView.hidden);
     BOOL progressUsed = self.imageView.hidden;
+    BOOL cancelButtonUsed = [self.cancelBlocks count] > 0;
     
     // Calculate size of string
     CGRect labelRect = CGRectZero;
     CGFloat labelHeight = 0.0f;
     CGFloat labelWidth = 0.0f;
+    
+    // Calculate cancel button frame
+    CGRect cancelButtonRect = CGRectZero;
     
     if(self.statusLabel.text) {
         CGSize constraintSize = CGSizeMake(200.0f, 300.0f);
@@ -494,6 +508,11 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
         hudHeight += SVProgressHUDLabelSpacing;
     }
     
+    if (cancelButtonUsed) {
+        cancelButtonRect = CGRectMake(0.0f, 0.0f, hudWidth, 30.0f);
+        hudHeight += cancelButtonRect.size.height;
+    }
+    
     // Update values on subviews
     self.hudView.bounds = CGRectMake(0.0f, 0.0f, MAX(self.minimumSize.width, hudWidth), MAX(self.minimumSize.height, hudHeight));
     
@@ -523,6 +542,8 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
     }
     self.statusLabel.frame = labelRect;
     self.statusLabel.center = CGPointMake(CGRectGetMidX(self.hudView.bounds), centerY);
+    self.cancelButton.frame = cancelButtonRect;
+    self.cancelButton.center = CGPointMake(CGRectGetMidX(self.hudView.bounds), CGRectGetMaxY(self.statusLabel.frame) + cancelButtonRect.size.height / 2.0f);
     
     [CATransaction commit];
 }
@@ -757,6 +778,22 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
     }
 }
 
+- (void)cancelButtonPressed:(UIButton *)sender {
+    for (void(^block)(void) in self.cancelBlocks) {
+        if (block) {
+            [block invoke];
+        }
+        
+        [SVProgressHUD popActivity];
+    }
+    
+    [self.cancelBlocks removeAllObjects];
+    
+    // hide cancel button if popup is still visible
+    if (self.activityCount > 0) {
+        [self updateHUDFrame];
+    }
+}
 
 #pragma mark - Master show/dismiss methods
 
@@ -987,6 +1024,8 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 }
 
 - (void)dismissWithDelay:(NSTimeInterval)delay completion:(SVProgressHUDDismissCompletion)completion {
+    [self.cancelBlocks removeAllObjects];
+    
     __weak SVProgressHUD *weakSelf = self;
     [[NSOperationQueue mainQueue] addOperationWithBlock:^{
         __strong SVProgressHUD *strongSelf = weakSelf;
@@ -1332,6 +1371,23 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
     return _imageView;
 }
 
+- (UIButton*)cancelButton {
+    if (!_cancelButton) {
+        _cancelButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        [_cancelButton addTarget:self action:@selector(cancelButtonPressed:) forControlEvents:UIControlEventTouchUpInside];
+        [_cancelButton setTitle:NSLocalizedString(@"Cancel", nil) forState:UIControlStateNormal];
+    }
+    
+    if(!_cancelButton.superview)
+        [self.hudView.contentView addSubview:_cancelButton];
+    
+    
+    // Update styling
+    [_cancelButton.titleLabel setFont:self.font];
+    
+    return _cancelButton;
+}
+
 
 #pragma mark - Helper
     
@@ -1541,6 +1597,14 @@ static const CGFloat SVProgressHUDLabelSpacing = 8.0f;
 
 - (void)setMaxSupportedWindowLevel:(UIWindowLevel)maxSupportedWindowLevel {
     if (!_isInitializing) _maxSupportedWindowLevel = maxSupportedWindowLevel;
+}
+
+- (NSMutableArray *)cancelBlocks {
+    if (!_cancelBlocks) {
+        _cancelBlocks = [NSMutableArray array];
+    }
+    
+    return _cancelBlocks;
 }
 
 @end
